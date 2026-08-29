@@ -27,6 +27,13 @@ def test_forward_and_loss():
     assert torch.isfinite(output.loss)
 
 
+def test_base_model_accepts_precomputed_embeddings():
+    model = tiny_model()
+    embeddings = torch.rand(2, 6, model.config.hidden_size)
+    output = model.nexo(inputs_embeds=embeddings)
+    assert output.last_hidden_state.shape == embeddings.shape
+
+
 def test_causal_mask_blocks_future_tokens():
     model = tiny_model().eval()
     prefix = torch.tensor([[1, 2, 3, 4]])

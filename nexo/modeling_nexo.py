@@ -107,7 +107,8 @@ class NexoModel(NexoPreTrainedModel):
         if sequence_length > self.config.max_position_embeddings:
             raise ValueError("Input is longer than max_position_embeddings")
         if position_ids is None:
-            position_ids = torch.arange(sequence_length, device=input_ids.device).unsqueeze(0)
+            device = input_ids.device if input_ids is not None else inputs_embeds.device
+            position_ids = torch.arange(sequence_length, device=device).unsqueeze(0)
         if inputs_embeds is None:
             inputs_embeds = self.token_embeddings(input_ids)
         hidden_states = self.dropout(inputs_embeds + self.position_embeddings(position_ids))
