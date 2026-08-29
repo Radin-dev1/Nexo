@@ -1,0 +1,19 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "nexo-ai"
+version = "0.1.0"
+description = "Nexo: a compact Hugging Face-compatible causal language model."
+readme = "README.md"
+requires-python = ">=3.10"
+dependencies = [
+  "torch>=2.2",
+  "transformers>=4.45",
+  "datasets>=2.20",
+  "accelerate>=0.33",
+]
+
+[tool.setuptools.packages.find]
+include = ["nexo*"]

@@ -1,0 +1,8 @@
+__pycache__/
+*.py[cod]
+.venv/
+outputs/
+checkpoints/
+wandb/
+data/*.txt
+!data/example.txt

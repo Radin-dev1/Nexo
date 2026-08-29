@@ -1,0 +1,2 @@
+Nexo is a compact language model designed to learn from custom text.
+Replace this example file with a larger, clean UTF-8 corpus before training.
