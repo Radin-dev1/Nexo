@@ -1,4 +1,5 @@
 import math
+from typing import ClassVar
 
 import torch
 from torch import nn
@@ -104,7 +105,7 @@ class NexoModel(NexoPreTrainedModel):
 
 
 class NexoForCausalLM(NexoPreTrainedModel):
-    _tied_weights_keys = ["lm_head.weight"]
+    _tied_weights_keys: ClassVar[list[str]] = ["lm_head.weight"]
 
     def __init__(self, config: NexoConfig):
         super().__init__(config)

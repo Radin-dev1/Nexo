@@ -8,7 +8,6 @@ from pydantic import BaseModel, Field
 
 from .runtime import GenerationSettings, NexoRuntime
 
-
 app = FastAPI(title="Nexo AI", version="0.1.0")
 
 

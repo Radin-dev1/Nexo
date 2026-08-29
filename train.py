@@ -1,7 +1,13 @@
 import argparse
+from itertools import chain
 
 from datasets import load_dataset
-from transformers import AutoTokenizer, DataCollatorForLanguageModeling, Trainer, TrainingArguments
+from transformers import (
+    AutoTokenizer,
+    DataCollatorForLanguageModeling,
+    Trainer,
+    TrainingArguments,
+)
 
 from nexo import NexoConfig, NexoForCausalLM
 
@@ -35,7 +41,7 @@ def main():
     tokenized = dataset.map(tokenize, batched=True, remove_columns=dataset.column_names)
 
     def group(batch):
-        combined = sum(batch["input_ids"], [])
+        combined = list(chain.from_iterable(batch["input_ids"]))
         size = (len(combined) // args.context_length) * args.context_length
         chunks = [combined[i : i + args.context_length] for i in range(0, size, args.context_length)]
         return {"input_ids": chunks, "attention_mask": [[1] * len(x) for x in chunks]}
