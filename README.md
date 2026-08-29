@@ -60,6 +60,17 @@ python train_multimodal.py `
 
 The trainer automatically reserves context positions for visual patches and masks padded text labels from the loss.
 
+## Train on Kaggle and store on Hugging Face
+
+Use [`notebooks/kaggle_train_nexo.ipynb`](notebooks/kaggle_train_nexo.ipynb) for the complete cloud workflow:
+
+1. Import the notebook into Kaggle and enable a GPU under **Settings → Accelerator**.
+2. Attach a Kaggle dataset containing a non-empty text corpus, `multimodal.jsonl`, and the referenced images.
+3. In **Add-ons → Secrets**, add `HF_TOKEN` containing a Hugging Face token with write access.
+4. Run all cells. The notebook trains the tokenizer and multimodal model, uploads `outputs/nexo-vision` to `Radin132/nexo`, then reloads it from Hugging Face as a verification step.
+
+Change `HF_REPO_ID` in the notebook if you want a different Hugging Face destination. Never paste tokens directly into notebook cells or commit them to GitHub.
+
 ## Architecture controls
 
 `train.py` exposes `--hidden-size`, `--layers`, `--heads`, `--intermediate-size`, and `--context-length`. The defaults create a roughly 30M-parameter model. These values can be increased for more capacity when the dataset and available GPU compute justify it.
