@@ -18,6 +18,7 @@ class ImageTextDataset(Dataset):
             self.rows = [json.loads(line) for line in handle if line.strip()]
         if not self.rows:
             raise ValueError("The JSONL manifest is empty")
+
         visual_tokens = (image_size // patch_size) ** 2
         self.text_length = context_length - visual_tokens
         if self.text_length < 2:
@@ -30,9 +31,15 @@ class ImageTextDataset(Dataset):
 
     def __getitem__(self, index):
         row = self.rows[index]
+        if "image" not in row or "text" not in row:
+            raise ValueError("Each manifest row must contain 'image' and 'text' fields")
+
         image_path = Path(row["image"])
         if not image_path.is_absolute():
             image_path = self.manifest_dir / image_path
+        if not image_path.exists():
+            raise FileNotFoundError(f"Image not found: {image_path}")
+
         image = Image.open(image_path).convert("RGB").resize(
             (self.image_size, self.image_size)
         )
@@ -57,26 +64,46 @@ class ImageTextDataset(Dataset):
         }
 
 
-def main():
+def parse_args():
     parser = argparse.ArgumentParser(description="Train Nexo on image-text pairs.")
     parser.add_argument("--manifest", required=True, help="JSONL with image and text fields")
     parser.add_argument("--tokenizer", required=True)
+    parser.add_argument("--base-model", default=None, help="Optional pretrained Nexo checkpoint")
     parser.add_argument("--output", default="outputs/nexo-vision")
     parser.add_argument("--context-length", type=int, default=256)
     parser.add_argument("--image-size", type=int, default=128)
     parser.add_argument("--patch-size", type=int, default=16)
     parser.add_argument("--epochs", type=float, default=1.0)
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
+    parser.add_argument("--weight-decay", type=float, default=0.01)
+    parser.add_argument("--warmup-ratio", type=float, default=0.03)
+    parser.add_argument("--lr-scheduler-type", default="cosine")
     parser.add_argument("--hidden-size", type=int, default=384)
     parser.add_argument("--layers", type=int, default=6)
     parser.add_argument("--heads", type=int, default=6)
     parser.add_argument("--intermediate-size", type=int, default=1536)
+    parser.add_argument("--logging-steps", type=int, default=10)
+    parser.add_argument("--save-total-limit", type=int, default=2)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--fp16", action="store_true")
+    parser.add_argument("--bf16", action="store_true")
+    parser.add_argument("--resume-from-checkpoint", default=None)
     args = parser.parse_args()
+    if args.fp16 and args.bf16:
+        parser.error("Choose either --fp16 or --bf16, not both")
+    if args.image_size % args.patch_size != 0:
+        parser.error("--image-size must be divisible by --patch-size")
+    return args
 
+
+def main():
+    args = parse_args()
     tokenizer = AutoTokenizer.from_pretrained(args.tokenizer)
     if tokenizer.pad_token is None:
         tokenizer.pad_token = tokenizer.eos_token
+
     dataset = ImageTextDataset(
         args.manifest,
         tokenizer,
@@ -84,40 +111,70 @@ def main():
         args.image_size,
         args.patch_size,
     )
-    config = NexoConfig(
-        vocab_size=len(tokenizer),
-        max_position_embeddings=args.context_length,
-        hidden_size=args.hidden_size,
-        num_hidden_layers=args.layers,
-        num_attention_heads=args.heads,
-        intermediate_size=args.intermediate_size,
-        image_size=args.image_size,
-        patch_size=args.patch_size,
-        bos_token_id=tokenizer.bos_token_id,
-        eos_token_id=tokenizer.eos_token_id,
-        pad_token_id=tokenizer.pad_token_id,
-    )
-    config.auto_map = {
+
+    if args.base_model:
+        model = NexoForCausalLM.from_pretrained(args.base_model)
+        if len(tokenizer) != model.config.vocab_size:
+            raise ValueError(
+                "Tokenizer vocabulary does not match the base model. "
+                "Use the tokenizer that was used to train the checkpoint."
+            )
+        if model.config.patch_size != args.patch_size:
+            raise ValueError(
+                "The base model patch size does not match --patch-size. "
+                "Changing patch size would change the vision encoder weights."
+            )
+        if args.context_length > model.config.max_position_embeddings:
+            raise ValueError(
+                "--context-length cannot exceed the base model's max_position_embeddings"
+            )
+        model.config.image_size = args.image_size
+    else:
+        config = NexoConfig(
+            vocab_size=len(tokenizer),
+            max_position_embeddings=args.context_length,
+            hidden_size=args.hidden_size,
+            num_hidden_layers=args.layers,
+            num_attention_heads=args.heads,
+            intermediate_size=args.intermediate_size,
+            image_size=args.image_size,
+            patch_size=args.patch_size,
+            bos_token_id=tokenizer.bos_token_id,
+            eos_token_id=tokenizer.eos_token_id,
+            pad_token_id=tokenizer.pad_token_id,
+        )
+        model = NexoForCausalLM(config)
+
+    model.config.auto_map = {
         "AutoConfig": "configuration_nexo.NexoConfig",
         "AutoModel": "modeling_nexo.NexoModel",
         "AutoModelForCausalLM": "modeling_nexo.NexoForCausalLM",
     }
-    model = NexoForCausalLM(config)
+
     trainer = Trainer(
         model=model,
         args=TrainingArguments(
             output_dir=args.output,
             num_train_epochs=args.epochs,
             per_device_train_batch_size=args.batch_size,
+            gradient_accumulation_steps=args.gradient_accumulation_steps,
             learning_rate=args.learning_rate,
-            logging_steps=10,
+            weight_decay=args.weight_decay,
+            warmup_ratio=args.warmup_ratio,
+            lr_scheduler_type=args.lr_scheduler_type,
+            logging_steps=args.logging_steps,
             save_strategy="epoch",
+            save_total_limit=args.save_total_limit,
             report_to="none",
             remove_unused_columns=False,
+            fp16=args.fp16,
+            bf16=args.bf16,
+            seed=args.seed,
+            dataloader_num_workers=2,
         ),
         train_dataset=dataset,
     )
-    trainer.train()
+    trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
     model.save_pretrained(args.output)
     tokenizer.save_pretrained(args.output)
     for filename in ("configuration_nexo.py", "modeling_nexo.py"):
