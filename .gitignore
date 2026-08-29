@@ -6,3 +6,4 @@ checkpoints/
 wandb/
 data/*.txt
 !data/example.txt
+!data/multimodal.example.jsonl

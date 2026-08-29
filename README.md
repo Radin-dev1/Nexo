@@ -38,6 +38,28 @@ Docker users can run `docker compose up --build` after placing trained weights i
 
 To send an image through the API, include a PNG or JPEG as `image_base64`. Nexo resizes it to the configured image size, converts it into visual patch tokens, and places those tokens before the text prompt so causal attention can condition the response on the image.
 
+## Train image understanding
+
+Create a JSONL manifest with one image-caption or image-response pair per line. Relative image paths are resolved from the manifest's directory:
+
+```json
+{"image":"photos/dog.jpg","text":"A brown dog running through grass."}
+{"image":"charts/sales.png","text":"The chart shows sales increasing from January to March."}
+```
+
+Then train the vision encoder and language model together:
+
+```powershell
+python train_multimodal.py `
+  --manifest data/multimodal.jsonl `
+  --tokenizer outputs/nexo-tokenizer `
+  --output outputs/nexo-vision `
+  --image-size 128 `
+  --context-length 256
+```
+
+The trainer automatically reserves context positions for visual patches and masks padded text labels from the loss.
+
 ## Architecture controls
 
 `train.py` exposes `--hidden-size`, `--layers`, `--heads`, `--intermediate-size`, and `--context-length`. The defaults create a roughly 30M-parameter model. These values can be increased for more capacity when the dataset and available GPU compute justify it.
