@@ -90,16 +90,27 @@ class NexoModel(NexoPreTrainedModel):
     def set_input_embeddings(self, value):
         self.token_embeddings = value
 
-    def forward(self, input_ids, attention_mask=None, position_ids=None, **kwargs):
+    def forward(
+        self,
+        input_ids=None,
+        attention_mask=None,
+        position_ids=None,
+        inputs_embeds=None,
+        **kwargs,
+    ):
         del kwargs
-        _, sequence_length = input_ids.shape
+        if (input_ids is None) == (inputs_embeds is None):
+            raise ValueError("Provide exactly one of input_ids or inputs_embeds")
+        sequence_length = (
+            input_ids.shape[1] if input_ids is not None else inputs_embeds.shape[1]
+        )
         if sequence_length > self.config.max_position_embeddings:
             raise ValueError("Input is longer than max_position_embeddings")
         if position_ids is None:
             position_ids = torch.arange(sequence_length, device=input_ids.device).unsqueeze(0)
-        hidden_states = self.dropout(
-            self.token_embeddings(input_ids) + self.position_embeddings(position_ids)
-        )
+        if inputs_embeds is None:
+            inputs_embeds = self.token_embeddings(input_ids)
+        hidden_states = self.dropout(inputs_embeds + self.position_embeddings(position_ids))
         for layer in self.layers:
             hidden_states = layer(hidden_states, attention_mask)
         return BaseModelOutput(last_hidden_state=self.final_norm(hidden_states))
@@ -114,6 +125,13 @@ class NexoForCausalLM(NexoPreTrainedModel, GenerationMixin):
         super().__init__(config)
         self.nexo = NexoModel(config)
         self.lm_head = nn.Linear(config.hidden_size, config.vocab_size, bias=False)
+        self.vision_encoder = nn.Conv2d(
+            config.num_image_channels,
+            config.hidden_size,
+            kernel_size=config.patch_size,
+            stride=config.patch_size,
+        )
+        self.vision_norm = nn.LayerNorm(config.hidden_size, eps=config.layer_norm_epsilon)
         self.post_init()
 
     def get_input_embeddings(self):
@@ -128,12 +146,49 @@ class NexoForCausalLM(NexoPreTrainedModel, GenerationMixin):
     def set_output_embeddings(self, value):
         self.lm_head = value
 
-    def prepare_inputs_for_generation(self, input_ids, attention_mask=None, **kwargs):
-        return {"input_ids": input_ids, "attention_mask": attention_mask}
+    def prepare_inputs_for_generation(
+        self, input_ids, attention_mask=None, pixel_values=None, **kwargs
+    ):
+        return {
+            "input_ids": input_ids,
+            "attention_mask": attention_mask,
+            "pixel_values": pixel_values,
+        }
 
-    def forward(self, input_ids, attention_mask=None, labels=None, **kwargs):
-        outputs = self.nexo(input_ids=input_ids, attention_mask=attention_mask, **kwargs)
-        logits = self.lm_head(outputs.last_hidden_state)
+    def encode_image(self, pixel_values):
+        if pixel_values.ndim != 4:
+            raise ValueError("pixel_values must have shape [batch, channels, height, width]")
+        patches = self.vision_encoder(pixel_values).flatten(2).transpose(1, 2)
+        return self.vision_norm(patches)
+
+    def forward(
+        self,
+        input_ids,
+        attention_mask=None,
+        labels=None,
+        pixel_values=None,
+        **kwargs,
+    ):
+        text_embeddings = self.get_input_embeddings()(input_ids)
+        model_attention_mask = attention_mask
+        if pixel_values is not None:
+            image_embeddings = self.encode_image(pixel_values)
+            text_embeddings = torch.cat((image_embeddings, text_embeddings), dim=1)
+            image_mask = torch.ones(
+                image_embeddings.shape[:2],
+                dtype=attention_mask.dtype if attention_mask is not None else torch.long,
+                device=input_ids.device,
+            )
+            if attention_mask is None:
+                attention_mask = torch.ones_like(input_ids)
+            model_attention_mask = torch.cat((image_mask, attention_mask), dim=1)
+        outputs = self.nexo(
+            inputs_embeds=text_embeddings,
+            attention_mask=model_attention_mask,
+            **kwargs,
+        )
+        text_hidden_states = outputs.last_hidden_state[:, -input_ids.shape[1] :]
+        logits = self.lm_head(text_hidden_states)
         loss = None
         if labels is not None:
             loss = F.cross_entropy(

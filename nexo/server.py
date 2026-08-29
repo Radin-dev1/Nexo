@@ -1,9 +1,12 @@
 import argparse
+import base64
 import os
 from functools import lru_cache
+from io import BytesIO
 
 import uvicorn
 from fastapi import FastAPI, HTTPException
+from PIL import Image
 from pydantic import BaseModel, Field
 
 from .runtime import GenerationSettings, NexoRuntime
@@ -17,6 +20,11 @@ class GenerateRequest(BaseModel):
     temperature: float = Field(default=0.8, ge=0.0, le=2.0)
     top_p: float = Field(default=0.95, gt=0.0, le=1.0)
     repetition_penalty: float = Field(default=1.05, ge=0.5, le=2.0)
+    image_base64: str | None = Field(
+        default=None,
+        description="Optional base64-encoded PNG or JPEG image",
+        max_length=15_000_000,
+    )
 
 
 class GenerateResponse(BaseModel):
@@ -38,6 +46,10 @@ def health():
 def generate(request: GenerateRequest):
     try:
         runtime = get_runtime()
+        image = None
+        if request.image_base64:
+            encoded = request.image_base64.split(",", 1)[-1]
+            image = Image.open(BytesIO(base64.b64decode(encoded, validate=True)))
         text = runtime.generate(
             request.prompt,
             GenerationSettings(
@@ -46,9 +58,10 @@ def generate(request: GenerateRequest):
                 top_p=request.top_p,
                 repetition_penalty=request.repetition_penalty,
             ),
+            image=image,
         )
         return GenerateResponse(text=text, model=runtime.model_path)
-    except (OSError, ValueError, RuntimeError) as exc:
+    except (OSError, ValueError, RuntimeError, base64.binascii.Error) as exc:
         raise HTTPException(status_code=503, detail=str(exc)) from exc
 
 

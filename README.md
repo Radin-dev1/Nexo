@@ -1,6 +1,6 @@
 # Nexo
 
-Nexo is a complete, original decoder-only AI project built with PyTorch and the Hugging Face Transformers interface. It includes causal multi-head self-attention, learned positional embeddings, custom tokenizer training, model training, terminal chat, text generation, and a FastAPI service.
+Nexo is a complete, original multimodal AI project built with PyTorch and the Hugging Face Transformers interface. It includes causal multi-head self-attention, a trainable image patch encoder, learned positional embeddings, custom tokenizer training, model training, terminal chat, image-aware text generation, and a FastAPI service.
 
 The default model has about 30 million parameters. It starts with random weights: training data is what gives it useful behavior.
 
@@ -14,6 +14,7 @@ python train_tokenizer.py --data data/example.txt --output outputs/nexo-tokenize
 python train.py --data data/example.txt --tokenizer outputs/nexo-tokenizer --output outputs/nexo --epochs 1
 python generate.py --model outputs/nexo --prompt "Nexo is"
 nexo-chat --model outputs/nexo
+nexo-chat --model outputs/nexo --image path/to/photo.jpg
 ```
 
 For a useful model, replace `data/example.txt` with a substantial, cleaned text corpus you have permission to use. A GPU is strongly recommended. Adjust the architecture in `NexoConfig` or add command-line options before committing to a long training run.
@@ -34,6 +35,8 @@ curl.exe -X POST http://localhost:8000/v1/generate `
 ```
 
 Docker users can run `docker compose up --build` after placing trained weights in `outputs/nexo`.
+
+To send an image through the API, include a PNG or JPEG as `image_base64`. Nexo resizes it to the configured image size, converts it into visual patch tokens, and places those tokens before the text prompt so causal attention can condition the response on the image.
 
 ## Architecture controls
 
@@ -65,6 +68,7 @@ Review the generated files and model card before uploading. Publishing weights i
 ## Important limitations
 
 - This repository provides the model architecture and training pipeline, not pretrained weights.
+- Image understanding requires image-caption or visual-instruction training data; adding an image encoder alone does not create pretrained visual knowledge.
 - Tiny datasets only verify that training works; they do not create a capable assistant.
 - The simple training script is intended as a clear starting point, not a large-scale distributed training system.
 - Only train on data you are legally and ethically allowed to use.

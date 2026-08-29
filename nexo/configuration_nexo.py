@@ -16,6 +16,9 @@ class NexoConfig(PretrainedConfig):
         attention_dropout=0.0,
         layer_norm_epsilon=1e-5,
         initializer_range=0.02,
+        image_size=224,
+        patch_size=16,
+        num_image_channels=3,
         tie_word_embeddings=True,
         bos_token_id=50256,
         eos_token_id=50256,
@@ -29,6 +32,8 @@ class NexoConfig(PretrainedConfig):
         )
         if hidden_size % num_attention_heads != 0:
             raise ValueError("hidden_size must be divisible by num_attention_heads")
+        if image_size % patch_size != 0:
+            raise ValueError("image_size must be divisible by patch_size")
         self.vocab_size = vocab_size
         self.hidden_size = hidden_size
         self.num_hidden_layers = num_hidden_layers
@@ -39,3 +44,6 @@ class NexoConfig(PretrainedConfig):
         self.attention_dropout = attention_dropout
         self.layer_norm_epsilon = layer_norm_epsilon
         self.initializer_range = initializer_range
+        self.image_size = image_size
+        self.patch_size = patch_size
+        self.num_image_channels = num_image_channels

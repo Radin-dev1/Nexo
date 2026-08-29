@@ -16,6 +16,8 @@ dependencies = [
   "tokenizers>=0.20",
   "fastapi>=0.115",
   "uvicorn[standard]>=0.30",
+  "pillow>=10.4",
+  "numpy>=1.26",
 ]
 
 [project.optional-dependencies]
