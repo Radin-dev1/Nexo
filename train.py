@@ -20,12 +20,25 @@ def parse_args():
     parser.add_argument("--context-length", type=int, default=256)
     parser.add_argument("--epochs", type=float, default=1.0)
     parser.add_argument("--batch-size", type=int, default=4)
+    parser.add_argument("--gradient-accumulation-steps", type=int, default=1)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
+    parser.add_argument("--weight-decay", type=float, default=0.01)
+    parser.add_argument("--warmup-ratio", type=float, default=0.03)
+    parser.add_argument("--lr-scheduler-type", default="cosine")
     parser.add_argument("--hidden-size", type=int, default=384)
     parser.add_argument("--layers", type=int, default=6)
     parser.add_argument("--heads", type=int, default=6)
     parser.add_argument("--intermediate-size", type=int, default=1536)
-    return parser.parse_args()
+    parser.add_argument("--logging-steps", type=int, default=10)
+    parser.add_argument("--save-total-limit", type=int, default=2)
+    parser.add_argument("--seed", type=int, default=42)
+    parser.add_argument("--fp16", action="store_true")
+    parser.add_argument("--bf16", action="store_true")
+    parser.add_argument("--resume-from-checkpoint", default=None)
+    args = parser.parse_args()
+    if args.fp16 and args.bf16:
+        parser.error("Choose either --fp16 or --bf16, not both")
+    return args
 
 
 def main():
@@ -43,10 +56,22 @@ def main():
     def group(batch):
         combined = list(chain.from_iterable(batch["input_ids"]))
         size = (len(combined) // args.context_length) * args.context_length
-        chunks = [combined[i : i + args.context_length] for i in range(0, size, args.context_length)]
-        return {"input_ids": chunks, "attention_mask": [[1] * len(x) for x in chunks]}
+        chunks = [
+            combined[i : i + args.context_length]
+            for i in range(0, size, args.context_length)
+        ]
+        return {
+            "input_ids": chunks,
+            "attention_mask": [[1] * len(chunk) for chunk in chunks],
+        }
 
     tokenized = tokenized.map(group, batched=True)
+    if len(tokenized) == 0:
+        raise ValueError(
+            "The corpus did not produce a full training sequence. "
+            "Use more text or reduce --context-length."
+        )
+
     config = NexoConfig(
         vocab_size=len(tokenizer),
         max_position_embeddings=args.context_length,
@@ -68,10 +93,19 @@ def main():
         output_dir=args.output,
         num_train_epochs=args.epochs,
         per_device_train_batch_size=args.batch_size,
+        gradient_accumulation_steps=args.gradient_accumulation_steps,
         learning_rate=args.learning_rate,
-        logging_steps=10,
+        weight_decay=args.weight_decay,
+        warmup_ratio=args.warmup_ratio,
+        lr_scheduler_type=args.lr_scheduler_type,
+        logging_steps=args.logging_steps,
         save_strategy="epoch",
+        save_total_limit=args.save_total_limit,
         report_to="none",
+        fp16=args.fp16,
+        bf16=args.bf16,
+        seed=args.seed,
+        dataloader_num_workers=2,
     )
     trainer = Trainer(
         model=model,
@@ -79,7 +113,7 @@ def main():
         train_dataset=tokenized,
         data_collator=DataCollatorForLanguageModeling(tokenizer=tokenizer, mlm=False),
     )
-    trainer.train()
+    trainer.train(resume_from_checkpoint=args.resume_from_checkpoint)
     model.save_pretrained(args.output)
     tokenizer.save_pretrained(args.output)
     for filename in ("configuration_nexo.py", "modeling_nexo.py"):
