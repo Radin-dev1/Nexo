@@ -5,6 +5,7 @@ import torch
 from torch import nn
 from torch.nn import functional as F
 from transformers import PreTrainedModel
+from transformers.generation import GenerationMixin
 from transformers.modeling_outputs import BaseModelOutput, CausalLMOutput
 
 from .configuration_nexo import NexoConfig
@@ -104,8 +105,10 @@ class NexoModel(NexoPreTrainedModel):
         return BaseModelOutput(last_hidden_state=self.final_norm(hidden_states))
 
 
-class NexoForCausalLM(NexoPreTrainedModel):
-    _tied_weights_keys: ClassVar[list[str]] = ["lm_head.weight"]
+class NexoForCausalLM(NexoPreTrainedModel, GenerationMixin):
+    _tied_weights_keys: ClassVar[dict[str, str]] = {
+        "lm_head.weight": "nexo.token_embeddings.weight"
+    }
 
     def __init__(self, config: NexoConfig):
         super().__init__(config)
