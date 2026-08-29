@@ -15,6 +15,10 @@ def parse_args():
     parser.add_argument("--epochs", type=float, default=1.0)
     parser.add_argument("--batch-size", type=int, default=4)
     parser.add_argument("--learning-rate", type=float, default=3e-4)
+    parser.add_argument("--hidden-size", type=int, default=384)
+    parser.add_argument("--layers", type=int, default=6)
+    parser.add_argument("--heads", type=int, default=6)
+    parser.add_argument("--intermediate-size", type=int, default=1536)
     return parser.parse_args()
 
 
@@ -43,6 +47,10 @@ def main():
         bos_token_id=tokenizer.bos_token_id,
         eos_token_id=tokenizer.eos_token_id,
         pad_token_id=tokenizer.pad_token_id,
+        hidden_size=args.hidden_size,
+        num_hidden_layers=args.layers,
+        num_attention_heads=args.heads,
+        intermediate_size=args.intermediate_size,
     )
     config.auto_map = {
         "AutoConfig": "configuration_nexo.NexoConfig",

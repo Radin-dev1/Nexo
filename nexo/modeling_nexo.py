@@ -90,7 +90,7 @@ class NexoModel(NexoPreTrainedModel):
 
     def forward(self, input_ids, attention_mask=None, position_ids=None, **kwargs):
         del kwargs
-        batch_size, sequence_length = input_ids.shape
+        _, sequence_length = input_ids.shape
         if sequence_length > self.config.max_position_embeddings:
             raise ValueError("Input is longer than max_position_embeddings")
         if position_ids is None:

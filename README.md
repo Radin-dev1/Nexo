@@ -1,6 +1,6 @@
 # Nexo
 
-Nexo is a compact, original decoder-only language model built with PyTorch and the Hugging Face Transformers interface. It has causal multi-head self-attention, learned positional embeddings, GELU feed-forward blocks, tied token/output embeddings, and a configurable architecture.
+Nexo is a complete, original decoder-only AI project built with PyTorch and the Hugging Face Transformers interface. It includes causal multi-head self-attention, learned positional embeddings, custom tokenizer training, model training, terminal chat, text generation, and a FastAPI service.
 
 The default model has about 30 million parameters. It starts with random weights: training data is what gives it useful behavior.
 
@@ -10,11 +10,34 @@ The default model has about 30 million parameters. It starts with random weights
 python -m venv .venv
 .venv\Scripts\Activate.ps1
 pip install -e .
-python train.py --data data/example.txt --output outputs/nexo --epochs 1
+python train_tokenizer.py --data data/example.txt --output outputs/nexo-tokenizer
+python train.py --data data/example.txt --tokenizer outputs/nexo-tokenizer --output outputs/nexo --epochs 1
 python generate.py --model outputs/nexo --prompt "Nexo is"
+nexo-chat --model outputs/nexo
 ```
 
 For a useful model, replace `data/example.txt` with a substantial, cleaned text corpus you have permission to use. A GPU is strongly recommended. Adjust the architecture in `NexoConfig` or add command-line options before committing to a long training run.
+
+## API server
+
+```powershell
+$env:NEXO_MODEL = "outputs/nexo"
+nexo-serve --port 8000
+```
+
+Open `http://localhost:8000/docs` for the interactive API. Generate text with:
+
+```powershell
+curl.exe -X POST http://localhost:8000/v1/generate `
+  -H "Content-Type: application/json" `
+  -d '{"prompt":"Hello Nexo","max_new_tokens":80}'
+```
+
+Docker users can run `docker compose up --build` after placing trained weights in `outputs/nexo`.
+
+## Architecture controls
+
+`train.py` exposes `--hidden-size`, `--layers`, `--heads`, `--intermediate-size`, and `--context-length`. The defaults create a roughly 30M-parameter model. These values can be increased for more capacity when the dataset and available GPU compute justify it.
 
 ## Load with Transformers
 

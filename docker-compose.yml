@@ -1,0 +1,9 @@
+services:
+  nexo:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      NEXO_MODEL: /models/nexo
+    volumes:
+      - ./outputs/nexo:/models/nexo:ro
